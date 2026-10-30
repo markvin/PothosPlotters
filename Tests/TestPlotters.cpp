@@ -9,7 +9,6 @@
 #include <QImage>
 #include <QString>
 #include <QTableWidget>
-#include <QThreadPool>
 #include <QWidget>
 #include <qwt_plot.h>
 #include <qwt_plot_curve.h>
@@ -35,21 +34,30 @@
  * is present, the test makes one with the offscreen platform.
  **********************************************************************/
 
-//use the application of the host (for example PothosFlow) when it has one,
-//else make one QApplication that stays until the module unloads. Do not
-//leak it: the core unloads the module and Qt Widgets before the process
-//ends, and a QApplication that stays after that crashes at exit.
-static std::unique_ptr<QApplication> testApplication;
-
-static void ensureApplication(void)
+//The QApplication of a test: use the application of the host (for example
+//PothosFlow) when it has one, else make one for the time of the test.
+//Delete it at the end of the test, not when the core unloads the module:
+//~QCoreApplication waits for the threads of the Qt thread pool (the
+//spectrogram renders with QtConcurrent). In the unload of a DLL (Windows
+//loader lock) that wait hangs, and after the unload of Qwt and of the
+//plotter modules (macOS) it crashes. Make it first in a test, so that the
+//blocks and their widgets go before it.
+class TestApplication
 {
-    if (QApplication::instance() != nullptr) return;
-    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "offscreen");
-    static int argc = 1;
-    static char arg0[] = "PothosPlottersTest";
-    static char *argv[] = {arg0, nullptr};
-    testApplication = std::make_unique<QApplication>(argc, argv);
-}
+public:
+    TestApplication(void)
+    {
+        if (QApplication::instance() != nullptr) return;
+        if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "offscreen");
+        static int argc = 1;
+        static char arg0[] = "PothosPlottersTest";
+        static char *argv[] = {arg0, nullptr};
+        _app = std::make_unique<QApplication>(argc, argv);
+    }
+
+private:
+    std::unique_ptr<QApplication> _app;
+};
 
 //run the queued calls of the setters; a queued slot can queue a
 //new call, thus do more rounds
@@ -121,7 +129,7 @@ private:
 //control widgets take no argument
 static Pothos::Proxy makeWidgetBlock(const std::string &path)
 {
-    ensureApplication();
+    POTHOS_TEST_TRUE(QApplication::instance() != nullptr);
     auto block = Pothos::BlockRegistry::make(path);
     POTHOS_TEST_TRUE(block.call<QWidget *>("widget") != nullptr);
     return block;
@@ -129,7 +137,7 @@ static Pothos::Proxy makeWidgetBlock(const std::string &path)
 
 static Pothos::Proxy makePlotter(const std::string &path)
 {
-    ensureApplication();
+    POTHOS_TEST_TRUE(QApplication::instance() != nullptr);
     auto block = Pothos::BlockRegistry::make(path, Pothos::ProxyEnvironment::make("managed"));
     POTHOS_TEST_TRUE(block.call<QWidget *>("widget") != nullptr);
     return block;
@@ -140,6 +148,7 @@ static Pothos::Proxy makePlotter(const std::string &path)
  **********************************************************************/
 POTHOS_TEST_BLOCK("/plotters/tests", test_constellation)
 {
+    TestApplication app;
     QtWarningCheck qtWarnings;
     auto block = makePlotter("/plotters/constellation");
     block.call("setTitle", QString("Constellation"));
@@ -160,6 +169,7 @@ POTHOS_TEST_BLOCK("/plotters/tests", test_constellation)
 
 POTHOS_TEST_BLOCK("/plotters/tests", test_logic_analyzer)
 {
+    TestApplication app;
     QtWarningCheck qtWarnings;
     auto block = makePlotter("/plotters/logic_analyzer");
     block.call("setNumInputs", size_t(2));
@@ -177,6 +187,7 @@ POTHOS_TEST_BLOCK("/plotters/tests", test_logic_analyzer)
 
 POTHOS_TEST_BLOCK("/plotters/tests", test_periodogram)
 {
+    TestApplication app;
     QtWarningCheck qtWarnings;
     auto block = makePlotter("/plotters/periodogram");
     block.call("setTitle", QString("Periodogram"));
@@ -205,6 +216,7 @@ POTHOS_TEST_BLOCK("/plotters/tests", test_periodogram)
 
 POTHOS_TEST_BLOCK("/plotters/tests", test_spectrogram)
 {
+    TestApplication app;
     QtWarningCheck qtWarnings;
     auto block = makePlotter("/plotters/spectrogram");
     block.call("setTitle", QString("Spectrogram"));
@@ -231,6 +243,7 @@ POTHOS_TEST_BLOCK("/plotters/tests", test_spectrogram)
 
 POTHOS_TEST_BLOCK("/plotters/tests", test_wave_monitor)
 {
+    TestApplication app;
     QtWarningCheck qtWarnings;
     auto block = makePlotter("/plotters/wave_monitor");
     block.call("setNumInputs", size_t(2));
@@ -260,6 +273,7 @@ POTHOS_TEST_BLOCK("/plotters/tests", test_wave_monitor)
 //the 4 Qwt control widgets have the same bounds and value calls
 static void testQwtWidget(const std::string &path)
 {
+    TestApplication app;
     QtWarningCheck qtWarnings;
     auto block = makeWidgetBlock(path);
     block.call("setTitle", QString("Qwt"));
@@ -295,6 +309,7 @@ POTHOS_TEST_BLOCK("/plotters/tests", test_qwt_dial)
 //the plotters keep their old paths under /widgets/
 POTHOS_TEST_BLOCK("/plotters/tests", test_old_paths)
 {
+    TestApplication app;
     for (const std::string name : {"constellation", "logic_analyzer",
         "periodogram", "spectrogram", "wave_monitor"})
     {
@@ -361,6 +376,7 @@ static void testData(const std::string &path, const std::string &dtype,
     const std::function<void(Pothos::Proxy &)> &setup,
     const std::function<bool(QWidget *)> &hasData)
 {
+    TestApplication app;
     QtWarningCheck qtWarnings;
     auto plotter = makePlotter(path);
     auto widget = plotter.call<QWidget *>("widget");
@@ -392,12 +408,6 @@ static void testData(const std::string &path, const std::string &dtype,
         topology.commit();
     }
     processEvents();
-
-    //the spectrogram renders its raster in threads of the global Qt thread
-    //pool (QwtPlotRasterItem with setRenderThreadCount(0)). Stop them now:
-    //threads that stay until the core unloads the modules and Qt crash
-    //(macOS) or hang (Windows) at the exit of the process
-    QThreadPool::globalInstance()->waitForDone();
     POTHOS_TEST_TRUE(ok);
     qtWarnings.check();
 }
