@@ -5,11 +5,11 @@
 # Qwt_VERSION, Qwt_INCLUDE_DIR and Qwt_LIBRARY. The caller must find Qt 6
 # (Qt6::Widgets) first.
 #
-# 1. pkg-config: the module Qt6Qwt6 (Arch, a Qwt installed with qmake on
-#    Linux). A Qwt that has only the module Qt5Qwt6 is refused.
-# 2. Else find_path/find_library in CMAKE_PREFIX_PATH or Qwt_ROOT (Windows,
-#    a macOS framework, a Qwt without its .pc file). QwtCheckQt.cmake then
-#    examines the libraries that Qwt uses: a Qwt for Qt 5 is refused.
+# find_path/find_library search Qwt_ROOT, CMAKE_PREFIX_PATH and the system
+# directories. The pkg-config module Qt6Qwt6 (Arch, a Qwt installed with
+# qmake on Linux and macOS) only gives hints: a prefix of the user comes
+# first. Thus QwtCheckQt.cmake always examines the libraries that the
+# found Qwt library uses, and refuses a Qwt for Qt 5.
 ########################################################################
 include(FindPackageHandleStandardArgs)
 
@@ -18,12 +18,6 @@ set(_qwt_qt5_message "")
 find_package(PkgConfig QUIET)
 if (PKG_CONFIG_FOUND)
     pkg_check_modules(PC_QWT QUIET Qt6Qwt6)
-    if (NOT PC_QWT_FOUND)
-        pkg_check_modules(PC_QWT_QT5 QUIET Qt5Qwt6)
-        if (PC_QWT_QT5_FOUND)
-            set(_qwt_qt5_message "pkg-config finds only Qt5Qwt6 (a Qwt for Qt 5). ")
-        endif ()
-    endif ()
 endif ()
 
 find_path(Qwt_INCLUDE_DIR
@@ -42,10 +36,10 @@ if (Qwt_INCLUDE_DIR AND EXISTS "${Qwt_INCLUDE_DIR}/qwt_global.h")
         Qwt_VERSION "${_qwt_version_line}")
 endif ()
 
-#without pkg-config the Qt version of Qwt is not known: examine the
-#libraries that it uses (on Windows the DLL, not the import library)
+#examine the libraries that the found Qwt library uses (on Windows the
+#DLL, not the import library)
 set(Qwt_FOR_QT6 TRUE)
-if (Qwt_LIBRARY AND NOT PC_QWT_FOUND AND NOT _qwt_qt5_message)
+if (Qwt_LIBRARY)
     set(_qwt_check_file "${Qwt_LIBRARY}")
     if (WIN32)
         get_filename_component(_qwt_dir "${Qwt_LIBRARY}" DIRECTORY)
@@ -71,10 +65,6 @@ if (Qwt_LIBRARY AND NOT PC_QWT_FOUND AND NOT _qwt_qt5_message)
         endif ()
     endif ()
 endif ()
-if (_qwt_qt5_message)
-    set(Qwt_FOR_QT6 FALSE)
-endif ()
-
 find_package_handle_standard_args(Qwt
     REQUIRED_VARS Qwt_LIBRARY Qwt_INCLUDE_DIR Qwt_FOR_QT6
     VERSION_VAR Qwt_VERSION

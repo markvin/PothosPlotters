@@ -23,10 +23,16 @@ if (IS_DIRECTORY "${QWT_LIBRARY}")
     set(QWT_LIBRARY "${QWT_LIBRARY}/${name}")
 endif ()
 
+#only the names of the dependencies count: a name that resolves to two
+#paths (CONFLICTING_DEPENDENCIES_PREFIX) must not stop the check
 file(GET_RUNTIME_DEPENDENCIES
     LIBRARIES "${QWT_LIBRARY}"
     RESOLVED_DEPENDENCIES_VAR resolved
-    UNRESOLVED_DEPENDENCIES_VAR unresolved)
+    UNRESOLVED_DEPENDENCIES_VAR unresolved
+    CONFLICTING_DEPENDENCIES_PREFIX conflicting)
+foreach(name IN LISTS conflicting_FILENAMES)
+    list(APPEND resolved ${conflicting_${name}})
+endforeach()
 
 set(qt5 "")
 set(qt6 FALSE)

@@ -52,9 +52,10 @@ or give `Qt6_DIR` and `Qwt_ROOT`. On Linux and macOS, the installed
 modules then have an RPATH to the Qt and Qwt library directories. On
 Windows, put the Qt `bin` directory and the Qwt DLL directory on `PATH`.
 
-`cmake/FindQwt.cmake` finds Qwt with pkg-config (the module `Qt6Qwt6`),
-or else in `CMAKE_PREFIX_PATH`. Without pkg-config, it examines the
-libraries that the Qwt library uses, and refuses a Qwt for Qt 5.
+`cmake/FindQwt.cmake` finds Qwt in `Qwt_ROOT`, `CMAKE_PREFIX_PATH` and
+the system directories (pkg-config and its module `Qt6Qwt6` give hints).
+It examines the libraries that the found Qwt library uses, and refuses a
+Qwt for Qt 5.
 
 Install the modules and the library `PothosPlotterUtils`:
 

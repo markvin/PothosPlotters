@@ -148,7 +148,7 @@ jobs:
       # only the library: no designer plugin, examples, tests, polar plots,
       # SVG or OpenGL support (install-qt-action has no Qt Svg), no macOS
       # framework, only the release build
-      - name: Build and install Qwt
+      - name: Get and configure the Qwt source
         if: steps.qwt-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
@@ -161,18 +161,49 @@ jobs:
             echo "$QWT_SHA256  qwt.tar.bz2" | shasum -a 256 -c -
           fi
           tar -xjf qwt.tar.bz2
-          cd "qwt-$QWT_VERSION"
+          mv "qwt-$QWT_VERSION" qwt-src
+          cd qwt-src
           #qwtconfig.pri uses the prefix at once (QWT_INSTALL_LIBS = ...):
           #replace the lines, do not add a new one at the end
           sed -i.orig -E "s|^([[:space:]]*QWT_INSTALL_PREFIX[[:space:]]*=).*|\1 $QWT_PREFIX|" qwtconfig.pri
           echo "QWT_CONFIG -= QwtPolar QwtSvg QwtOpenGL QwtDesigner QwtDesignerSelfContained QwtExamples QwtPlayground QwtTests QwtFramework" >> qwtconfig.pri
           printf 'CONFIG -= debug_and_release build_all debug\nCONFIG += release\n' >> qwtbuild.pri
-          qmake qwt.pro
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            nmake && nmake install
-          else
-            make -j4 && make install
+          #macOS: without a framework, the dylib gets a bare install name,
+          #and dyld does not use the RPATH of the plotters for it
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            echo 'QMAKE_SONAME_PREFIX = @rpath' >> qwtbuild.pri
           fi
+
+      - name: Build and install Qwt (Linux, macOS)
+        if: steps.qwt-cache.outputs.cache-hit != 'true' && runner.os != 'Windows'
+        shell: bash
+        working-directory: qwt-src
+        run: |
+          qmake qwt.pro
+          make -j4
+          make install
+
+      # cmd, not bash: in Git Bash, the coreutils link shadows the MSVC
+      # link.exe that the qmake Makefile calls by name
+      - name: Build and install Qwt (Windows)
+        if: steps.qwt-cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        shell: cmd
+        working-directory: qwt-src
+        run: |
+          qmake qwt.pro || exit /b 1
+          nmake || exit /b 1
+          nmake install || exit /b 1
+
+      # the install name, the dependencies and the Qt version of Qwt in the log
+      - name: Show the Qwt library
+        shell: bash
+        run: |
+          ls -l "$QWT_PREFIX/lib"
+          case "$RUNNER_OS" in
+            macOS) otool -D "$QWT_PREFIX"/lib/libqwt.6.dylib; otool -L "$QWT_PREFIX"/lib/libqwt.6.dylib ;;
+            Windows) dumpbin //dependents "$QWT_PREFIX/lib/qwt.dll" ;;
+            *) readelf -d "$QWT_PREFIX"/lib/libqwt.so | grep -E 'NEEDED|SONAME|RUNPATH|RPATH' ;;
+          esac
 
       # save now, not at the end of the job: a failed test of plotters must
       # not make the next run build Qwt again
