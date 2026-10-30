@@ -271,6 +271,26 @@ jobs:
         #-V: the output of every self-test (passed ones too)
         run: ctest --test-dir build --output-on-failure -V
 
+      # temporary: the thread stacks of the hang at the exit of PothosUtil
+      # (Windows): run the test alone, attach cdb after 2 minutes
+      - name: Hang stacks (Windows)
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:POTHOS_ROOT = $env:POTHOS_PREFIX
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $env:POTHOS_PLUGIN_PATH = (Resolve-Path build/stage/lib/Pothos/modules*).Path
+          $env:PATH = "$PWD\build\stage\bin;$env:PATH"
+          foreach ($t in @('test_data_spectrogram', 'test_spectrogram', 'test_data_periodogram')) {
+            "=== $t"
+            $p = Start-Process -FilePath "$env:POTHOS_PREFIX/bin/PothosUtil.exe" `
+              -ArgumentList '--self-test1', "/plotters/tests/$t" -PassThru -NoNewWindow
+            if ($p.WaitForExit(120000)) { "exit code $($p.ExitCode)"; continue }
+            $cdb = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
+            & $cdb -p $p.Id -c '.symfix; .reload; ~*kb 40; qd'
+            $p.Kill()
+          }
+
       # temporary: the backtrace of a crash at the exit of PothosUtil (macOS)
       - name: Crash reports (macOS)
         if: failure() && runner.os == 'macOS'
