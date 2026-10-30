@@ -9,7 +9,7 @@
 #include <string>
 #include <cassert>
 #include <algorithm>
-#include <spuce/filters/design_window.h>
+#include "Window.hpp"
 
 ////////////////////////////////////////////////////////////////////////
 //FFT code can be found at:
@@ -74,7 +74,7 @@ struct FFTPowerSpectrum
         //windowing
         if (_precomputedWindow.size() != fftBins.size())
         {
-            _precomputedWindow = spuce::design_window(_windowType, fftBins.size(), _windowArgs.empty()?0.0:_windowArgs.at(0));
+            _precomputedWindow = PothosPlotters::designWindow(_windowType, int(fftBins.size()), _windowArgs.empty()?0.0:_windowArgs.at(0));
             _precomputedWindowPower = 0.0;
             for (size_t n = 0; n < _precomputedWindow.size(); n++)
             {

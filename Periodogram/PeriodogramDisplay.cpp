@@ -9,6 +9,7 @@
 #include <qwt_plot_grid.h>
 #include <qwt_legend.h>
 #include <qwt_plot_zoomer.h>
+#include <qwt_text.h>
 #include <QHBoxLayout>
 #include <algorithm> //min/max
 
@@ -165,7 +166,7 @@ void PeriodogramDisplay::handleUpdateAxis(void)
     }
     _mainPlot->setAxisTitle(QwtPlot::xBottom, axisTitle);
 
-    _mainPlot->zoomer()->setAxis(QwtPlot::xBottom, QwtPlot::yLeft);
+    _mainPlot->zoomer()->setAxes(QwtPlot::xBottom, QwtPlot::yLeft);
     _sampleRateWoAxisUnits = _sampleRate/factor;
     _centerFreqWoAxisUnits = _centerFreq/factor;
     const qreal freqLow = _fftModeComplex?(_centerFreqWoAxisUnits-_sampleRateWoAxisUnits/2):0.0;

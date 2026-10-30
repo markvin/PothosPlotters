@@ -1,14 +1,5 @@
 ########################################################################
-## Feature registration
-########################################################################
-cmake_dependent_option(ENABLE_PLOTTERS_WAVEMONITOR "Enable Pothos Plotters.WaveMonitor component" ON "ENABLE_PLOTTERS" OFF)
-add_feature_info("  Wave Monitor" ENABLE_PLOTTERS_WAVEMONITOR "Wavemonitor time-domain waveform plotter")
-if (NOT ENABLE_PLOTTERS_WAVEMONITOR)
-    return()
-endif()
-
-########################################################################
-# Build time domain plot module
+# WaveMonitor module
 ########################################################################
 POTHOS_MODULE_UTIL(
     TARGET WaveMonitor
@@ -18,8 +9,9 @@ POTHOS_MODULE_UTIL(
         WaveMonitorDisplay.cpp
     DOC_SOURCES WaveMonitor.cpp
     LIBRARIES
-        Qt${QT_VERSION_MAJOR}::Widgets
-        PothosQwt
+        Qt6::Widgets
+        Qwt::Qwt
         PothosPlotterUtils
     DESTINATION plotters
 )
+plotters_target(WaveMonitor MODULE)

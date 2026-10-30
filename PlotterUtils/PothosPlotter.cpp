@@ -12,6 +12,8 @@
 #include <qwt_text.h>
 #include <qwt_plot_grid.h>
 #include <QMouseEvent>
+#include <QPen>
+#include <QStack>
 
 /***********************************************************************
  * Custom Fonts for styling
@@ -74,7 +76,7 @@ PothosPlotter::PothosPlotter(QWidget *parent, const int enables):
 {
     //setup canvas
     this->setCanvas(new PothosPlotterCanvas(this));
-    auto bgColor = this->palette().color(QPalette::Background);
+    auto bgColor = this->palette().color(QPalette::Window);
 
     //When the default background is light, force the plot
     //background to be white because it generally looks better;

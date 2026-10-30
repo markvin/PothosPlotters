@@ -1,14 +1,5 @@
 ########################################################################
-## Feature registration
-########################################################################
-cmake_dependent_option(ENABLE_PLOTTERS_CONSTELLATION "Enable Pothos Plotters.Constellation component" ON "ENABLE_PLOTTERS" OFF)
-add_feature_info("  Constellation" ENABLE_PLOTTERS_CONSTELLATION "Constellation complex IQ data plotter")
-if (NOT ENABLE_PLOTTERS_CONSTELLATION)
-    return()
-endif()
-
-########################################################################
-# Build constellation plot module
+# Constellation module
 ########################################################################
 POTHOS_MODULE_UTIL(
     TARGET Constellation
@@ -18,8 +9,9 @@ POTHOS_MODULE_UTIL(
         ConstellationDisplay.cpp
     DOC_SOURCES Constellation.cpp
     LIBRARIES
-        Qt${QT_VERSION_MAJOR}::Widgets
-        PothosQwt
+        Qt6::Widgets
+        Qwt::Qwt
         PothosPlotterUtils
     DESTINATION plotters
 )
+plotters_target(Constellation MODULE)

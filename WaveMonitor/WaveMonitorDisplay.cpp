@@ -145,7 +145,7 @@ void WaveMonitorDisplay::handleUpdateAxis(void)
     }
     _mainPlot->setAxisTitle(QwtPlot::xBottom, timeAxisTitle);
 
-    _mainPlot->zoomer()->setAxis(QwtPlot::xBottom, QwtPlot::yLeft);
+    _mainPlot->zoomer()->setAxes(QwtPlot::xBottom, QwtPlot::yLeft);
     _sampleRateWoAxisUnits = _sampleRate/factor;
     _mainPlot->setAxisScale(QwtPlot::xBottom, 0, _numPoints/_sampleRateWoAxisUnits);
     _mainPlot->updateAxes(); //update after axis changes

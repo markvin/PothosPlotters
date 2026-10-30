@@ -9,6 +9,7 @@
 #include <qwt_plot_grid.h>
 #include <qwt_plot_zoomer.h>
 #include <qwt_plot_curve.h>
+#include <qwt_text.h>
 #include <QHBoxLayout>
 
 ConstellationDisplay::ConstellationDisplay(void):
