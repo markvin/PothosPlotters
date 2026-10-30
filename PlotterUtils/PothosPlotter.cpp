@@ -111,6 +111,9 @@ PothosPlotter::PothosPlotter(QWidget *parent, const int enables):
 
 PothosPlotter::~PothosPlotter(void)
 {
+    //~QwtPlot detaches the items and emits itemAttached: at that time the
+    //object is no longer a PothosPlotter, thus its slot must not run
+    disconnect(this, &PothosPlotter::itemAttached, this, &PothosPlotter::handleItemAttached);
     delete _zoomer;
     delete _grid;
 }
