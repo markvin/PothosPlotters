@@ -1,0 +1,318 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  # the branches of the Pothos core and of the toolkits that plotters
+  # builds and runs against (comms: /comms/wave_trigger; blocks: the tests)
+  POTHOS_CORE_REPO: markvin/PothosCore
+  POTHOS_CORE_REF: pothos2
+  POTHOS_BLOCKS_REPO: markvin/PothosBlocks
+  POTHOS_BLOCKS_REF: pothos2
+  POTHOS_COMMS_REPO: markvin/PothosComms
+  POTHOS_COMMS_REF: pothos2
+  # the minimum Qt version of plotters (Ubuntu 24.04 has Qt 6.4: too old).
+  # A matrix entry can give a different Qt with "qt".
+  QT_VERSION: '6.5.3'
+  # Qwt is not in Conan: build the upstream release archive with the qmake
+  # of the Qt above. The SHA-256 checks the archive.
+  QWT_VERSION: '6.3.0'
+  QWT_SHA256: dcb085896c28aaec5518cbc08c0ee2b4e60ada7ac929d82639f6189851a6129a
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-gcc
+            os: ubuntu-24.04
+            cc: gcc-14
+            cxx: g++-14
+            config: Debug
+            extra: "-DPLOTTERS_WARNINGS_AS_ERRORS=ON"
+          - name: linux-clang
+            os: ubuntu-24.04
+            cc: clang-18
+            cxx: clang++-18
+            config: Release
+            extra: "-DPLOTTERS_WARNINGS_AS_ERRORS=ON"
+          - name: macos
+            # temporary Intel (x86_64) runner, the same as the core
+            os: macos-15-intel
+            cc: clang
+            cxx: clang++
+            config: Debug
+            extra: "-DCMAKE_OSX_DEPLOYMENT_TARGET=13.3"
+            core_extra: "-DCMAKE_OSX_DEPLOYMENT_TARGET=13.3"
+          - name: windows
+            os: windows-latest
+            cc: cl
+            cxx: cl
+            config: Release
+            extra: ""
+            # the headers of Qt 6.5.3 use stdext checked iterators, which
+            # the MSVC of windows-latest does not have any more
+            qt: '6.8.3'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.POTHOS_CORE_REPO }}
+          ref: ${{ env.POTHOS_CORE_REF }}
+          path: pothos-core
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.POTHOS_BLOCKS_REPO }}
+          ref: ${{ env.POTHOS_BLOCKS_REF }}
+          path: pothos-blocks
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.POTHOS_COMMS_REPO }}
+          ref: ${{ env.POTHOS_COMMS_REF }}
+          path: pothos-comms
+
+      # the build must never download anything
+      - name: No network access in the build
+        shell: bash
+        run: |
+          if grep -rnE 'file\s*\(\s*DOWNLOAD|FetchContent|ExternalProject' --include=CMakeLists.txt --include='*.cmake' . \
+              --exclude-dir=pothos-core --exclude-dir=pothos-blocks --exclude-dir=pothos-comms; then
+            echo "build scripts must not download anything"; exit 1
+          fi
+
+      # Ninja; the OpenGL and EGL headers and libraries for the Qt Gui package
+      - name: Install Ninja and the Qt system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgl-dev libegl-dev libxkbcommon-dev libfontconfig1
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # the dependencies of the core, blocks and comms come from Conan 2;
+      # plotters needs no Conan packages. CC/CXX select the compiler.
+      - name: Dependencies of the core, blocks and comms (Conan)
+        shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          pipx install "conan>=2,<3"
+          conan profile detect --force
+          for dir in pothos-core pothos-blocks pothos-comms; do
+            conan install $dir --output-folder=$dir/build/conan \
+              -s build_type=${{ matrix.config }} -s compiler.cppstd=23 --build=missing \
+              -c tools.cmake.cmaketoolchain:generator=Ninja
+          done
+
+      # binary Qt from the Qt mirrors; sets QT_ROOT_DIR and puts the Qt bin
+      # directory on PATH (Windows finds the Qt DLLs there)
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ matrix.qt || env.QT_VERSION }}
+          cache: true
+
+      # Windows finds the Qwt DLL on PATH (qmake installs it into lib)
+      - name: Qwt prefix
+        shell: bash
+        run: |
+          prefix="$(pwd -W 2>/dev/null || pwd)/qwt-install"
+          echo "QWT_PREFIX=$prefix" >> "$GITHUB_ENV"
+          if command -v cygpath >/dev/null; then cygpath -w "$prefix/lib" >> "$GITHUB_PATH"; fi
+
+      # the key has the Qt version and a hash of this file: a change of the
+      # Qwt build options makes a new cache
+      - name: Restore Qwt
+        id: qwt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: qwt-install
+          key: qwt-${{ env.QWT_VERSION }}-${{ matrix.name }}-qt${{ matrix.qt || env.QT_VERSION }}-${{ hashFiles('.github/workflows/ci.yml') }}
+
+      # only the library: no designer plugin, examples, tests, polar plots,
+      # SVG or OpenGL support (install-qt-action has no Qt Svg), no macOS
+      # framework, only the release build
+      - name: Build and install Qwt
+        if: steps.qwt-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          curl -sSL --retry 3 -o qwt.tar.bz2 \
+            "https://downloads.sourceforge.net/project/qwt/qwt/$QWT_VERSION/qwt-$QWT_VERSION.tar.bz2"
+          #macOS has shasum, but no sha256sum
+          if command -v sha256sum >/dev/null; then
+            echo "$QWT_SHA256  qwt.tar.bz2" | sha256sum -c -
+          else
+            echo "$QWT_SHA256  qwt.tar.bz2" | shasum -a 256 -c -
+          fi
+          tar -xjf qwt.tar.bz2
+          cd "qwt-$QWT_VERSION"
+          #qwtconfig.pri uses the prefix at once (QWT_INSTALL_LIBS = ...):
+          #replace the lines, do not add a new one at the end
+          sed -i.orig -E "s|^([[:space:]]*QWT_INSTALL_PREFIX[[:space:]]*=).*|\1 $QWT_PREFIX|" qwtconfig.pri
+          echo "QWT_CONFIG -= QwtPolar QwtSvg QwtOpenGL QwtDesigner QwtDesignerSelfContained QwtExamples QwtPlayground QwtTests QwtFramework" >> qwtconfig.pri
+          printf 'CONFIG -= debug_and_release build_all debug\nCONFIG += release\n' >> qwtbuild.pri
+          qmake qwt.pro
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            nmake && nmake install
+          else
+            make -j4 && make install
+          fi
+
+      # save now, not at the end of the job: a failed test of plotters must
+      # not make the next run build Qwt again
+      - name: Save Qwt
+        if: steps.qwt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: qwt-install
+          key: ${{ steps.qwt-cache.outputs.cache-primary-key }}
+
+      - name: Build and install the core
+        shell: bash
+        run: |
+          #a path that CMake understands on Windows too (pwd -W: D:/a/...)
+          prefix="$(pwd -W 2>/dev/null || pwd)/pothos-install"
+          echo "POTHOS_PREFIX=$prefix" >> "$GITHUB_ENV"
+          cmake -S pothos-core -B pothos-core/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+            -DCMAKE_INSTALL_PREFIX="$prefix" \
+            -DPOTHOS_BUILD_TESTS=OFF -DPOTHOS_BUILD_DOCS=OFF \
+            ${{ matrix.core_extra }}
+          cmake --build pothos-core/build
+          cmake --install pothos-core/build
+
+      # the plotters use /comms/wave_trigger, and the data tests use
+      # /blocks/feeder_source: install both toolkits into the core prefix
+      - name: Build and install PothosBlocks and PothosComms
+        shell: bash
+        run: |
+          for dir in pothos-blocks pothos-comms; do
+            cmake -S $dir -B $dir/build -G Ninja \
+              -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+              -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+              -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+              -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+              -DCMAKE_PREFIX_PATH="$POTHOS_PREFIX" \
+              -DBLOCKS_BUILD_TESTS=OFF -DCOMMS_BUILD_TESTS=OFF \
+              ${{ matrix.core_extra }}
+            cmake --build $dir/build
+            cmake --install $dir/build
+          done
+
+      # the Qt prefix with forward slashes (cygpath -m on Windows)
+      - name: Configure
+        shell: bash
+        run: |
+          qt="$QT_ROOT_DIR"
+          if command -v cygpath >/dev/null; then qt="$(cygpath -m "$qt")"; fi
+          echo "PLOTTERS_QT_PREFIX=$qt" >> "$GITHUB_ENV"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_PREFIX_PATH="$POTHOS_PREFIX;$qt;$QWT_PREFIX" \
+            ${{ matrix.extra }}
+
+      # keep going after the first error to report all of them in one run
+      - name: Build
+        run: cmake --build build -- -k 0
+
+      - name: Test
+        #-V: the output of every self-test (passed ones too)
+        run: ctest --test-dir build --output-on-failure -V
+
+      # Qt and Qwt are not in system directories: the staged modules must
+      # have an RPATH to their library directories, and a relative RPATH
+      # to PothosPlotterUtils
+      - name: Check the install RPATH
+        if: matrix.name == 'linux-gcc'
+        shell: bash
+        run: |
+          module=$(find build/stage -name libWaveMonitor.so)
+          rpath=$(readelf -d "$module" | grep -E 'RUNPATH|RPATH')
+          echo "$rpath"
+          echo "$rpath" | grep -F "$PLOTTERS_QT_PREFIX/lib"
+          echo "$rpath" | grep -F "$QWT_PREFIX/lib"
+          echo "$rpath" | grep -F '$ORIGIN/../../..'
+
+  linux-system:
+    name: linux-system (Arch packages)
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:latest
+      #an init process as PID 1 reaps orphans (the same as the core CI)
+      options: --init
+    steps:
+      #asio, nlohmann-json and xsimd are for the core, blocks and comms;
+      #qt6-base and qwt are for plotters
+      - name: Install the toolchain and the dependencies
+        run: pacman -Syu --noconfirm base-devel cmake ninja git asio nlohmann-json xsimd qt6-base qwt
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.POTHOS_CORE_REPO }}
+          ref: ${{ env.POTHOS_CORE_REF }}
+          path: pothos-core
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.POTHOS_BLOCKS_REPO }}
+          ref: ${{ env.POTHOS_BLOCKS_REF }}
+          path: pothos-blocks
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.POTHOS_COMMS_REPO }}
+          ref: ${{ env.POTHOS_COMMS_REF }}
+          path: pothos-comms
+
+      - name: Build and install the core, blocks and comms
+        run: |
+          cmake -S pothos-core -B pothos-core/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_INSTALL_PREFIX="$PWD/pothos-install" \
+            -DPOTHOS_BUILD_TESTS=OFF -DPOTHOS_BUILD_DOCS=OFF
+          cmake --build pothos-core/build
+          cmake --install pothos-core/build
+          for dir in pothos-blocks pothos-comms; do
+            cmake -S $dir -B $dir/build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_PREFIX_PATH="$PWD/pothos-install" \
+              -DBLOCKS_BUILD_TESTS=OFF -DCOMMS_BUILD_TESTS=OFF
+            cmake --build $dir/build
+            cmake --install $dir/build
+          done
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_PREFIX_PATH="$PWD/pothos-install"
+          -DPLOTTERS_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build -- -k 0
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -V
