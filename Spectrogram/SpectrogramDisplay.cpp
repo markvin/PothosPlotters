@@ -216,7 +216,7 @@ void SpectrogramDisplay::handleUpdateAxis(void)
     }
     _mainPlot->setAxisTitle(QwtPlot::xBottom, freqAxisTitle);
 
-    _mainPlot->zoomer()->setAxis(QwtPlot::xBottom, QwtPlot::yLeft);
+    _mainPlot->zoomer()->setAxes(QwtPlot::xBottom, QwtPlot::yLeft);
 
     _sampleRateWoAxisUnits = _sampleRate/factor;
     _centerFreqWoAxisUnits = _centerFreq/factor;

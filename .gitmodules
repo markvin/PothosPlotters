@@ -1,4 +1,0 @@
-[submodule "qwt6"]
-	path = qwt6
-	url = https://github.com/opencor/qwt.git
-	branch = master

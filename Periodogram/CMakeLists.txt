@@ -1,14 +1,5 @@
 ########################################################################
-## Feature registration
-########################################################################
-cmake_dependent_option(ENABLE_PLOTTERS_PERIODOGRAM "Enable Pothos Plotters.Periodogram component" ON "Spuce_FOUND;ENABLE_PLOTTERS" OFF)
-add_feature_info("  Periodogram" ENABLE_PLOTTERS_PERIODOGRAM "Periodogram frequency-domain FFT plotter")
-if (NOT ENABLE_PLOTTERS_PERIODOGRAM)
-    return()
-endif()
-
-########################################################################
-# Build frequency domain plot module
+# Periodogram module
 ########################################################################
 POTHOS_MODULE_UTIL(
     TARGET Periodogram
@@ -19,9 +10,9 @@ POTHOS_MODULE_UTIL(
         PeriodogramDisplay.cpp
     DOC_SOURCES Periodogram.cpp
     LIBRARIES
-        Qt${QT_VERSION_MAJOR}::Widgets
-        PothosQwt
+        Qt6::Widgets
+        Qwt::Qwt
         PothosPlotterUtils
-        spuce
     DESTINATION plotters
 )
+plotters_target(Periodogram MODULE)

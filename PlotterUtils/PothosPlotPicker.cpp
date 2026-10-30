@@ -5,6 +5,8 @@
 #include <qwt_plot.h>
 #include <qwt_plot_canvas.h>
 #include <qwt_raster_data.h>
+#include <qwt_text.h>
+#include <qwt_interval.h>
 #include <QMouseEvent>
 #include <cassert>
 #include <algorithm> //min/max

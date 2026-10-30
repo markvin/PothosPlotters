@@ -1,118 +1,90 @@
-# Qt Widgets for Technical Applications
-# available at http://www.http://qwt.sourceforge.net/
+########################################################################
+# Find Qwt for Qt 6.
 #
-# The module defines the following variables:
-#  QWT_FOUND - the system has Qwt
-#  QWT_INCLUDE_DIR - where to find qwt_plot.h
-#  QWT_INCLUDE_DIRS - qwt includes
-#  QWT_LIBRARY - where to find the Qwt library
-#  QWT_LIBRARIES - aditional libraries
-#  QWT_MAJOR_VERSION - major version
-#  QWT_MINOR_VERSION - minor version
-#  QWT_PATCH_VERSION - patch version
-#  QWT_VERSION_STRING - version (ex. 5.2.1)
-#  QWT_ROOT_DIR - root dir (ex. /usr/local)
-
-#=============================================================================
-# Copyright 2010-2013, Julien Schueller
-# All rights reserved.
-# 
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met: 
-# 
-# 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer. 
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-#    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution. 
+# Gives the imported target Qwt::Qwt and the variables Qwt_FOUND,
+# Qwt_VERSION, Qwt_INCLUDE_DIR and Qwt_LIBRARY. The caller must find Qt 6
+# (Qt6::Widgets) first.
 #
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# find_path/find_library search Qwt_ROOT, CMAKE_PREFIX_PATH and the system
+# directories. The pkg-config module Qt6Qwt6 (Arch, a Qwt installed with
+# qmake on Linux and macOS) only gives hints: a prefix of the user comes
+# first. Thus QwtCheckQt.cmake always examines the libraries that the
+# found Qwt library uses, and refuses a Qwt for Qt 5.
+########################################################################
+include(FindPackageHandleStandardArgs)
 
-# The views and conclusions contained in the software and documentation are those
-# of the authors and should not be interpreted as representing official policies, 
-# either expressed or implied, of the FreeBSD Project.
-#=============================================================================
+set(_qwt_qt5_message "")
 
-
-find_path ( QWT_INCLUDE_DIR
-  NAMES qwt_plot.h
-  HINTS ${QT_INCLUDE_DIR}
-  PATH_SUFFIXES qwt-qt5 qwt
-)
-
-set ( QWT_INCLUDE_DIRS ${QWT_INCLUDE_DIR} )
-
-# version
-set ( _VERSION_FILE ${QWT_INCLUDE_DIR}/qwt_global.h )
-if ( EXISTS ${_VERSION_FILE} )
-  file ( STRINGS ${_VERSION_FILE} _VERSION_LINE REGEX "define[ ]+QWT_VERSION_STR" )
-  if ( _VERSION_LINE )
-    string ( REGEX REPLACE ".*define[ ]+QWT_VERSION_STR[ ]+\"(.*)\".*" "\\1" QWT_VERSION_STRING "${_VERSION_LINE}" )
-    string ( REGEX REPLACE "([0-9]+)\\.([0-9]+)\\.([0-9]+)" "\\1" QWT_MAJOR_VERSION "${QWT_VERSION_STRING}" )
-    string ( REGEX REPLACE "([0-9]+)\\.([0-9]+)\\.([0-9]+)" "\\2" QWT_MINOR_VERSION "${QWT_VERSION_STRING}" )
-    string ( REGEX REPLACE "([0-9]+)\\.([0-9]+)\\.([0-9]+)" "\\3" QWT_PATCH_VERSION "${QWT_VERSION_STRING}" )
-  endif ()
+find_package(PkgConfig QUIET)
+if (PKG_CONFIG_FOUND)
+    pkg_check_modules(PC_QWT QUIET Qt6Qwt6)
 endif ()
 
+find_path(Qwt_INCLUDE_DIR
+    NAMES qwt_global.h
+    HINTS ${PC_QWT_INCLUDE_DIRS}
+    PATH_SUFFIXES qwt-qt6 qwt6 qwt include include/qwt qwt.framework/Headers lib/qwt.framework/Headers)
 
-# check version
-set ( _QWT_VERSION_MATCH TRUE )
-if ( Qwt_FIND_VERSION AND QWT_VERSION_STRING )
-  if ( Qwt_FIND_VERSION_EXACT )
-    if ( NOT Qwt_FIND_VERSION VERSION_EQUAL QWT_VERSION_STRING )
-      set ( _QWT_VERSION_MATCH FALSE )
+find_library(Qwt_LIBRARY
+    NAMES qwt-qt6 qwt qwtd
+    HINTS ${PC_QWT_LIBRARY_DIRS})
+
+if (Qwt_INCLUDE_DIR AND EXISTS "${Qwt_INCLUDE_DIR}/qwt_global.h")
+    file(STRINGS "${Qwt_INCLUDE_DIR}/qwt_global.h" _qwt_version_line
+        REGEX "define[ \t]+QWT_VERSION_STR[ \t]+\"")
+    string(REGEX REPLACE ".*QWT_VERSION_STR[ \t]+\"([^\"]+)\".*" "\\1"
+        Qwt_VERSION "${_qwt_version_line}")
+endif ()
+
+#examine the libraries that the found Qwt library uses (on Windows the
+#DLL, not the import library)
+set(Qwt_FOR_QT6 TRUE)
+if (Qwt_LIBRARY)
+    set(_qwt_check_file "${Qwt_LIBRARY}")
+    if (WIN32)
+        get_filename_component(_qwt_dir "${Qwt_LIBRARY}" DIRECTORY)
+        get_filename_component(_qwt_name "${Qwt_LIBRARY}" NAME_WE)
+        find_file(_qwt_dll NAMES "${_qwt_name}.dll"
+            PATHS "${_qwt_dir}" "${_qwt_dir}/../bin" NO_DEFAULT_PATH NO_CACHE)
+        set(_qwt_check_file "${_qwt_dll}")
     endif ()
-  else ()
-    if ( QWT_VERSION_STRING VERSION_LESS Qwt_FIND_VERSION )
-      set ( _QWT_VERSION_MATCH FALSE )
+    if (NOT _qwt_check_file)
+        set(Qwt_FOR_QT6 FALSE)
+        set(_qwt_qt5_message "The Qwt DLL next to ${Qwt_LIBRARY} is missing. ")
+    else ()
+        execute_process(
+            COMMAND "${CMAKE_COMMAND}" "-DQWT_LIBRARY=${_qwt_check_file}"
+                -P "${CMAKE_CURRENT_LIST_DIR}/QwtCheckQt.cmake"
+            RESULT_VARIABLE _qwt_check_rc
+            OUTPUT_VARIABLE _qwt_check_out
+            ERROR_VARIABLE _qwt_check_out)
+        if (NOT _qwt_check_rc EQUAL 0)
+            set(Qwt_FOR_QT6 FALSE)
+            string(STRIP "${_qwt_check_out}" _qwt_check_out)
+            set(_qwt_qt5_message "${_qwt_check_out}\n")
+        endif ()
     endif ()
-  endif ()
+endif ()
+find_package_handle_standard_args(Qwt
+    REQUIRED_VARS Qwt_LIBRARY Qwt_INCLUDE_DIR Qwt_FOR_QT6
+    VERSION_VAR Qwt_VERSION
+    REASON_FAILURE_MESSAGE "${_qwt_qt5_message}")
+
+if (Qwt_FOUND AND NOT TARGET Qwt::Qwt)
+    add_library(Qwt::Qwt UNKNOWN IMPORTED)
+    set(_qwt_location "${Qwt_LIBRARY}")
+    #a framework: link the library in it
+    if (IS_DIRECTORY "${Qwt_LIBRARY}")
+        get_filename_component(_qwt_name "${Qwt_LIBRARY}" NAME_WE)
+        set(_qwt_location "${Qwt_LIBRARY}/${_qwt_name}")
+    endif ()
+    set_target_properties(Qwt::Qwt PROPERTIES
+        IMPORTED_LOCATION "${_qwt_location}"
+        INTERFACE_INCLUDE_DIRECTORIES "${Qwt_INCLUDE_DIR}"
+        INTERFACE_LINK_LIBRARIES Qt6::Widgets)
+    if (WIN32)
+        set_property(TARGET Qwt::Qwt APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS QWT_DLL)
+    endif ()
 endif ()
 
-
-find_library ( QWT_LIBRARY
-  NAMES qwt-qt5 qwt
-  HINTS ${QT_LIBRARY_DIR}
-)
-
-set ( QWT_LIBRARIES ${QWT_LIBRARY} )
-
-
-# try to guess root dir from include dir
-if ( QWT_INCLUDE_DIR )
-  string ( REGEX REPLACE "(.*)/include.*" "\\1" QWT_ROOT_DIR ${QWT_INCLUDE_DIR} )
-# try to guess root dir from library dir
-elseif ( QWT_LIBRARY )
-  string ( REGEX REPLACE "(.*)/lib[/|32|64].*" "\\1" QWT_ROOT_DIR ${QWT_LIBRARY} )
-endif ()
-
-
-# handle the QUIETLY and REQUIRED arguments
-include ( FindPackageHandleStandardArgs )
-if ( CMAKE_VERSION LESS 2.8.3 )
-  find_package_handle_standard_args( Qwt DEFAULT_MSG QWT_LIBRARY QWT_INCLUDE_DIR _QWT_VERSION_MATCH )
-else ()
-  find_package_handle_standard_args( Qwt REQUIRED_VARS QWT_LIBRARY QWT_INCLUDE_DIR _QWT_VERSION_MATCH VERSION_VAR QWT_VERSION_STRING )
-endif ()
-
-
-mark_as_advanced (
-  QWT_LIBRARY 
-  QWT_LIBRARIES
-  QWT_INCLUDE_DIR
-  QWT_INCLUDE_DIRS
-  QWT_MAJOR_VERSION
-  QWT_MINOR_VERSION
-  QWT_PATCH_VERSION
-  QWT_VERSION_STRING
-  QWT_ROOT_DIR
-)
+mark_as_advanced(Qwt_INCLUDE_DIR Qwt_LIBRARY)

@@ -4,6 +4,7 @@
 #pragma once
 #include <Pothos/Config.hpp>
 #include <qwt_raster_data.h>
+#include <qwt_interval.h>
 #include <QList>
 #include <valarray>
 #include <mutex>
@@ -18,8 +19,20 @@ public:
         this->setNumRows(1);
     }
 
+    //! Set the range of an axis (Qwt 6.2 removed QwtRasterData::setInterval)
+    void setInterval(const Qt::Axis axis, const QwtInterval &interval)
+    {
+        _intervals[axis] = interval;
+    }
+
+    //! The range of an axis
+    QwtInterval interval(const Qt::Axis axis) const override
+    {
+        return _intervals[axis];
+    }
+
     //! translate a plot coordinate into a raster value
-    double value(double x, double y) const
+    double value(double x, double y) const override
     {
         const auto time = size_t(_yScale*(y-_yOff));
         const auto bin = size_t(_xScale*(x-_xOff));
@@ -35,7 +48,7 @@ public:
     }
 
     //! A raster operation has begun
-    void initRaster(const QRectF &, const QSize &raster)
+    void initRaster(const QRectF &, const QSize &raster) override
     {
         _rasterMutex.lock();
 
@@ -57,7 +70,7 @@ public:
     }
 
     //! A raster operation has ended
-    void discardRaster(void)
+    void discardRaster(void) override
     {
         _rasterMutex.unlock();
     }
@@ -91,6 +104,9 @@ private:
         while (_data.size() > num) _data.pop_back();
         while (_data.size() < num) _data.push_front(_data.front());
     }
+
+    //the ranges of the x, y and z axes (Qt::XAxis, YAxis, ZAxis)
+    QwtInterval _intervals[3];
 
     //raster scale+adjustment factors
     float _yOff, _yScale, _xOff, _xScale;

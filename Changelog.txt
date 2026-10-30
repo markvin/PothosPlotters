@@ -1,5 +1,27 @@
 This this the changelog file for the Pothos Plotters toolkit.
 
+Release 0.5.0 (pending)
+==========================
+
+- Port to the modernized Pothos core (branch pothos2)
+- Qt 6 only, Qt 6.5 or higher; the Qt 5 support is removed
+- Qwt 6.3 or higher for Qt 6 from find_package (FindQwt.cmake); a Qwt
+  for Qt 5 is refused; the qwt6 submodule and the built-in Qwt are removed
+- CMake 3.25 or higher; a missing Qt 6 or Qwt stops the configure step
+- Own window functions (a copy of the spuce port of PothosComms); spuce is
+  no longer a dependency
+- Qwt 6.3 fixes: QwtPlotZoomer::setAxes, the spectrogram raster data gives
+  interval(), missing includes
+- Fixed: ~PothosPlotter called its slot from ~QwtPlot (a crash in a
+  debug build)
+- Install RPATH to the Qt and Qwt library directories when they are not
+  system directories, and a relative RPATH from the modules to
+  PothosPlotterUtils
+- Add self-tests: the windows, a smoke test of all blocks, and data
+  through the 5 plotters (offscreen platform, no display necessary)
+- Add CI for Linux, macOS and Windows
+- Remove the debian packaging
+
 Release 0.4.2 (2021-07-25)
 ==========================
 

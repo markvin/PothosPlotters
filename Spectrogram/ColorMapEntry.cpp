@@ -10,6 +10,7 @@
 #include <QIcon>
 #include <QAbstractItemView>
 #include <qwt_color_map.h>
+#include <qwt_interval.h>
 #include "GeneratedColorMaps.hpp"
 
 /***********************************************************************
@@ -22,8 +23,8 @@ public:
     ColorMapEntry(QWidget *parent):
         QComboBox(parent)
     {
-        connect(this, QOverload<int>::of(&QComboBox::currentIndexChanged), [=](int){emit this->widgetChanged();});
-        connect(this, &QComboBox::editTextChanged, [=](const QString &){emit this->entryChanged();});
+        connect(this, QOverload<int>::of(&QComboBox::currentIndexChanged), [this](int){emit this->widgetChanged();});
+        connect(this, &QComboBox::editTextChanged, [this](const QString &){emit this->entryChanged();});
         this->view()->setObjectName("BlockPropertiesEditWidget"); //to pick up eval color style
     }
 
