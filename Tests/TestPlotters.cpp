@@ -9,6 +9,7 @@
 #include <QImage>
 #include <QString>
 #include <QTableWidget>
+#include <QThreadPool>
 #include <QWidget>
 #include <qwt_plot.h>
 #include <qwt_plot_curve.h>
@@ -391,6 +392,12 @@ static void testData(const std::string &path, const std::string &dtype,
         topology.commit();
     }
     processEvents();
+
+    //the spectrogram renders its raster in threads of the global Qt thread
+    //pool (QwtPlotRasterItem with setRenderThreadCount(0)). Stop them now:
+    //threads that stay until the core unloads the modules and Qt crash
+    //(macOS) or hang (Windows) at the exit of the process
+    QThreadPool::globalInstance()->waitForDone();
     POTHOS_TEST_TRUE(ok);
     qtWarnings.check();
 }
