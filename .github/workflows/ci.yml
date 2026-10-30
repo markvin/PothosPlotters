@@ -271,6 +271,25 @@ jobs:
         #-V: the output of every self-test (passed ones too)
         run: ctest --test-dir build --output-on-failure -V
 
+      # temporary: the backtrace of a crash at the exit of PothosUtil (macOS)
+      - name: Crash reports (macOS)
+        if: failure() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          for f in ~/Library/Logs/DiagnosticReports/*PothosUtil*; do
+            [ -e "$f" ] || continue
+            echo "=== $f"; head -c 60000 "$f"
+          done
+          export POTHOS_ROOT="$POTHOS_PREFIX" QT_QPA_PLATFORM=offscreen
+          export POTHOS_PLUGIN_PATH="$(echo "$PWD"/build/stage/lib/Pothos/modules*)"
+          export HOME="$PWD/build/lldb-home"; mkdir -p "$HOME"
+          for t in test_qwt_knob test_data_spectrogram test_qwt_dial; do
+            for i in 1 2 3; do
+              lldb --batch -o run -k 'thread backtrace all' -k quit -- \
+                "$POTHOS_PREFIX/bin/PothosUtil" --self-test1 /plotters/tests/$t 2>&1 | tail -150
+            done
+          done
+
       # Qt and Qwt are not in system directories: the staged modules must
       # have an RPATH to their library directories, and a relative RPATH
       # to PothosPlotterUtils
