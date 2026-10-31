@@ -1,8 +1,9 @@
 This this the changelog file for the Pothos Plotters toolkit.
 
-Release 0.5.0 (pending)
+Release 0.5.0 (2026-10-31)
 ==========================
 
+- Needs the Pothos core 2.0.0 (the pothos2 line, ABI 2.0-0)
 - Port to the modernized Pothos core (branch pothos2)
 - Qt 6 only, Qt 6.5 or higher; the Qt 5 support is removed
 - Qwt 6.3 or higher for Qt 6 from find_package (FindQwt.cmake); a Qwt
