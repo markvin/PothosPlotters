@@ -21,6 +21,7 @@ Release 0.5.0 (pending)
   through the 5 plotters (offscreen platform, no display necessary)
 - Add CI for Linux, macOS and Windows
 - Remove the debian packaging
+- The self-tests unset the POTHOS_* variables of a developer shell
 
 Release 0.4.2 (2021-07-25)
 ==========================
